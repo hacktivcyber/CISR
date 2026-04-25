@@ -1,2 +1,2 @@
 # CISR
-Cyber Intelligence, Surveillance, and Reconnaissance (C-ISR) Script
+Cyber Intelligence, Surveillance, and Reconnaissance (C-ISR) Scripts
