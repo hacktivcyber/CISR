@@ -89,7 +89,7 @@ def main():
     print(f"[+] Subdomain Size Filter: -fs {final_sub_fs}")
 
     # 3. Main Directory Fuzz
-    dir_out = f"/home/kali/Desktop/{clean_name}_dir_results.txt"
+    dir_out = f"./{clean_name}_dir_results.txt"
     dir_cmd = ["ffuf", "-w", dir_dict, "-u", f"{target.rstrip('/')}/FUZZ", "-c", "-v", 
                "-o", dir_out, "-of", "csv", "-mc", "200-299,301,302,307,400,401,403,405,418,429,500,502,503", "-fs", final_dir_fs]
     if args.extensions:
@@ -100,7 +100,7 @@ def main():
 
     # 4. Main Subdomain Fuzz
     host_domain = re.sub(r'https?://', '', target).split('/')[0]
-    sub_out = f"/home/kali/Desktop/{clean_name}_sub_results.txt"
+    sub_out = f"./{clean_name}_sub_results.txt"
     sub_cmd = ["ffuf", "-w", sub_dict, "-u", target, "-H", f"Host: FUZZ.{host_domain}", 
                "-c", "-v", "-o", sub_out, "-of", "csv", "-mc", "200-299,301,302,307,400,401,403,405,418,429,500,502,503", "-fs", final_sub_fs]
     
