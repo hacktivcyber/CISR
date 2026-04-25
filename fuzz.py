@@ -66,6 +66,8 @@ def main():
     parser.add_argument("-d", "--dir_fs", help="Manual -fs for Directory", default=None)
     parser.add_argument("-s", "--sub_fs", help="Manual -fs for Subdomain", default=None)
     parser.add_argument("-e", "--extensions", help="Comma separated extensions", default=None)
+    parser.add_argument("--dir_dict", help="Path to directory wordlist", default="/home/kali/Desktop/dirFUZZ.txt")
+    parser.add_argument("--sub_dict", help="Path to subdomain wordlist", default="/home/kali/Desktop/subFUZZ.txt")
     parser.add_argument("-debug", action="store_true", help="Show raw test responses")
     
     args = parser.parse_args()
@@ -73,8 +75,8 @@ def main():
     target = args.target_url if args.target_url.startswith("http") else f"http://{args.target_url}"
     clean_name = get_clean_name(target)
     
-    dir_dict = "/home/kali/Desktop/dirFUZZ.txt"
-    sub_dict = "/home/kali/Desktop/subFUZZ.txt"
+    dir_dict = args.dir_dict
+    sub_dict = args.sub_dict
 
     print(f"--- Analysis Phase ---")
     
