@@ -81,101 +81,70 @@ echo -e "\n${MAGENTA}${BOLD}[!] COMPREHENSIVE SERVICE EVALUATION & TRIAGE:${NC}"
 echo -e "${CYAN}PORT\tSTATE\tSERVICE\t\tSTATUS & RECOMMENDATION${NC}"
 echo -e "${CYAN}------------------------------------------------------------${NC}"
 
+# Parse the grepable output for port and service details
 grep -v "^#" "$DIR/${PREFIX}tcp_ports.grep" | grep "Ports:" | sed 's/.*Ports: //' | tr ',' '\n' | while read -r line; do
     PORT=$(echo $line | cut -d'/' -f1 | xargs)
     STATE=$(echo $line | cut -d'/' -f2 | xargs)
     SERVICE_DET=$(echo $line | cut -d'/' -f5 | xargs)
 
-    KNOWN_PORT=false
-    KNOWN_SERVICE=false
+    IS_KNOWN_PORT=false
+    IS_KNOWN_SERVICE=false
+    EXPECTED_PORT=""
     RECOMMENDATION=""
 
-    # --- 1. COMPREHENSIVE KNOWN PORTS TABLE ---
-    # Includes: Infra, DBs, Middleware, and Common High-Port Web/Dev tools
+    # 1. THE TRUTH TABLE (Service Signatures)
+    case $SERVICE_DET in
+        ftp*)          IS_KNOWN_SERVICE=true; EXPECTED_PORT="21"; RECOMMENDATION="nmap -sV --script ftp-anon -p $PORT $TARGET" ;;
+        ssh)           IS_KNOWN_SERVICE=true; EXPECTED_PORT="22"; RECOMMENDATION="ssh -v -o PreferredAuthentications=password $TARGET -p $PORT" ;;
+        telnet)        IS_KNOWN_SERVICE=true; EXPECTED_PORT="23"; RECOMMENDATION="telnet $TARGET $PORT" ;;
+        smtp|submission|smtps) IS_KNOWN_SERVICE=true; EXPECTED_PORT="25"; RECOMMENDATION="nmap -p $PORT --script smtp-enum-users $TARGET" ;;
+        domain)        IS_KNOWN_SERVICE=true; EXPECTED_PORT="53"; RECOMMENDATION="dig axfr @$TARGET \$DOMAIN" ;;
+        finger)        IS_KNOWN_SERVICE=true; EXPECTED_PORT="79"; RECOMMENDATION="finger-user-enum.pl -U /usr/share/seclists/Usernames/Names/names.txt -t $TARGET" ;;
+        http*|ssl/http*|https*|uwsgi|nginx|apache|jetty|cups)
+                       IS_KNOWN_SERVICE=true; EXPECTED_PORT="80"; RECOMMENDATION="python3 fuzz.py $( [[ "$SERVICE_DET" == *"ssl"* || "$PORT" == "443" || "$PORT" == "8443" ]] && echo "https" || echo "http" )://$TARGET:$PORT" ;;
+        kerberos*)     IS_KNOWN_SERVICE=true; EXPECTED_PORT="88"; RECOMMENDATION="nmap -p $PORT --script krb5-enum-users --script-args krb5-enum-users.realm='<DOMAIN>' $TARGET" ;;
+        pop3*)         IS_KNOWN_SERVICE=true; EXPECTED_PORT="110"; RECOMMENDATION="nmap -p $PORT --script pop3-capabilities $TARGET" ;;
+        rpcbind|sunrpc) IS_KNOWN_SERVICE=true; EXPECTED_PORT="111"; RECOMMENDATION="rpcinfo -p $TARGET" ;;
+        imap*)         IS_KNOWN_SERVICE=true; EXPECTED_PORT="143"; RECOMMENDATION="nmap -p $PORT --script imap-capabilities $TARGET" ;;
+        snmp)          IS_KNOWN_SERVICE=true; EXPECTED_PORT="161"; RECOMMENDATION="snmp-check $TARGET -c public" ;;
+        ldap*)         IS_KNOWN_SERVICE=true; EXPECTED_PORT="389"; RECOMMENDATION="ldapsearch -x -H ldap://$TARGET:$PORT -s base namingcontexts" ;;
+        microsoft-ds|smb*|netbios-ssn) IS_KNOWN_SERVICE=true; EXPECTED_PORT="445"; RECOMMENDATION="enum4linux-ng -A $TARGET" ;;
+        rsync)         IS_KNOWN_SERVICE=true; EXPECTED_PORT="873"; RECOMMENDATION="rsync --list-only $TARGET::" ;;
+        ms-sql-s)      IS_KNOWN_SERVICE=true; EXPECTED_PORT="1433"; RECOMMENDATION="impacket-mssqlclient -windows-auth <DOMAIN>/<USER>@$TARGET" ;;
+        oracle)        IS_KNOWN_SERVICE=true; EXPECTED_PORT="1521"; RECOMMENDATION="nmap -p $PORT --script oracle-tns-version $TARGET" ;;
+        nfs)           IS_KNOWN_SERVICE=true; EXPECTED_PORT="2049"; RECOMMENDATION="showmount -e $TARGET" ;;
+        mysql|mariadb) IS_KNOWN_SERVICE=true; EXPECTED_PORT="3306"; RECOMMENDATION="mysql -h $TARGET -P $PORT -u root" ;;
+        ms-wbt-server) IS_KNOWN_SERVICE=true; EXPECTED_PORT="3389"; RECOMMENDATION="nmap -p $PORT --script rdp-ntlm-info $TARGET" ;;
+        postgresql)    IS_KNOWN_SERVICE=true; EXPECTED_PORT="5432"; RECOMMENDATION="psql -h $TARGET -p $PORT -U postgres" ;;
+        vnc)           IS_KNOWN_SERVICE=true; EXPECTED_PORT="5900"; RECOMMENDATION="nmap -sV --script vnc-info -p $PORT $TARGET" ;;
+        winrm)         IS_KNOWN_SERVICE=true; EXPECTED_PORT="5985"; RECOMMENDATION="crackmapexec winrm $TARGET -u 'guest' -p ''" ;;
+        redis)         IS_KNOWN_SERVICE=true; EXPECTED_PORT="6379"; RECOMMENDATION="redis-cli -h $TARGET -p $PORT info" ;;
+        mongodb)       IS_KNOWN_SERVICE=true; EXPECTED_PORT="27017"; RECOMMENDATION="mongo --host $TARGET --port $PORT" ;;
+    esac
+
+    # 2. THE CONTAINER TABLE (Known Ports)
     case $PORT in
         21|22|23|25|53|79|80|88|110|111|135|139|143|161|389|443|445|465|587|593|631|636|873|993|995|1080|1433|1521|2049|3306|3389|3690|4444|5000|5432|5900|5985|5986|6379|8000|8080|8081|8443|8888|9000|9200|10000|27017)
-            KNOWN_PORT=true ;;
+            IS_KNOWN_PORT=true ;;
     esac
 
-    # --- 2. COMPREHENSIVE SERVICE LOOKUP & COMMANDS ---
-    case $SERVICE_DET in
-        ftp)
-            KNOWN_SERVICE=true
-            RECOMMENDATION="nmap -sV --script ftp-anon -p $PORT $TARGET" ;;
-        ssh)
-            KNOWN_SERVICE=true
-            RECOMMENDATION="ssh -v -o PreferredAuthentications=password $TARGET -p $PORT" ;;
-        telnet)
-            KNOWN_SERVICE=true
-            RECOMMENDATION="telnet $TARGET $PORT" ;;
-        smtp|submission)
-            KNOWN_SERVICE=true
-            RECOMMENDATION="nmap -p $PORT --script smtp-enum-users $TARGET" ;;
-        domain)
-            KNOWN_SERVICE=true
-            RECOMMENDATION="dig axfr @$TARGET \$DOMAIN" ;;
-        finger)
-            KNOWN_SERVICE=true
-            RECOMMENDATION="finger-user-enum.pl -U /usr/share/seclists/Usernames/Names/names.txt -t $TARGET" ;;
-        http*|ssl/http*|https*|jetty|nginx|apache|vnc-http|uwsgi)
-            KNOWN_SERVICE=true
-            PROTO="http"; [[ "$SERVICE_DET" == *"ssl"* || "$SERVICE_DET" == *"https"* || "$PORT" == "443" || "$PORT" == "8443" ]] && PROTO="https"
-            RECOMMENDATION="python3 fuzz.py $PROTO://$TARGET:$PORT" ;;
-        rpcbind|sunrpc)
-            KNOWN_SERVICE=true
-            RECOMMENDATION="rpcinfo -p $TARGET" ;;
-        kerberos*)
-            KNOWN_SERVICE=true
-            RECOMMENDATION="nmap -p $PORT --script krb5-enum-users --script-args krb5-enum-users.realm='<DOMAIN>' $TARGET" ;;
-        ldap*)
-            KNOWN_SERVICE=true
-            RECOMMENDATION="ldapsearch -x -H ldap://$TARGET:$PORT -s base namingcontexts" ;;
-        microsoft-ds|smb|netbios-ssn)
-            KNOWN_SERVICE=true
-            RECOMMENDATION="enum4linux-ng -A $TARGET" ;;
-        ms-sql-s)
-            KNOWN_SERVICE=true
-            RECOMMENDATION="impacket-mssqlclient -windows-auth <DOMAIN>/<USER>@$TARGET" ;;
-        nfs)
-            KNOWN_SERVICE=true
-            RECOMMENDATION="showmount -e $TARGET" ;;
-        mysql|mariadb)
-            KNOWN_SERVICE=true
-            RECOMMENDATION="mysql -h $TARGET -P $PORT -u root" ;;
-        postgresql)
-            KNOWN_SERVICE=true
-            RECOMMENDATION="psql -h $TARGET -p $PORT -U postgres" ;;
-        ms-wbt-server)
-            KNOWN_SERVICE=true
-            RECOMMENDATION="nmap -p $PORT --script rdp-ntlm-info $TARGET" ;;
-        winrm)
-            KNOWN_SERVICE=true
-            RECOMMENDATION="crackmapexec winrm $TARGET -u 'guest' -p ''" ;;
-        rsync)
-            KNOWN_SERVICE=true
-            RECOMMENDATION="rsync --list-only $TARGET::" ;;
-        redis)
-            KNOWN_SERVICE=true
-            RECOMMENDATION="redis-cli -h $TARGET -p $PORT info" ;;
-        mongodb)
-            KNOWN_SERVICE=true
-            RECOMMENDATION="mongo --host $TARGET --port $PORT" ;;
-        elasticsearch)
-            KNOWN_SERVICE=true
-            RECOMMENDATION="curl -X GET 'http://$TARGET:$PORT/_cat/indices?v'" ;;
-    esac
-
-    # --- 3. FINAL TRIAGE OUTPUT ---
-    if [ "$KNOWN_PORT" = true ] && [ "$KNOWN_SERVICE" = true ]; then
-        echo -e "${GREEN}$PORT\t$STATE\t$SERVICE_DET\t\t[MATCH]${NC}"
-        echo -e "  ${YELLOW}>> Run: ${NC}$RECOMMENDATION"
-    elif [ "$KNOWN_PORT" = false ] && [ "$KNOWN_SERVICE" = true ]; then
-        echo -e "${YELLOW}$PORT\t$STATE\t$SERVICE_DET\t\t[MISMATCH]${NC}"
-        echo -e "  ${YELLOW}>> Run (Service Identified): ${NC}$RECOMMENDATION"
-    elif [ "$KNOWN_PORT" = true ] && [ "$KNOWN_SERVICE" = false ]; then
-        echo -e "${ORANGE}$PORT\t$STATE\t$SERVICE_DET\t\t[SERVICE UNKNOWN]${NC}"
+    # 3. 5-OUTCOME EVALUATION ENGINE
+    if [ "$IS_KNOWN_SERVICE" = true ]; then
+        # Check for Match (Including Web Clusters)
+        if [ "$PORT" == "$EXPECTED_PORT" ] || { [ "$EXPECTED_PORT" == "80" ] && [[ "$PORT" =~ ^(443|8000|8080|8081|8443|8888|9000|10000)$ ]]; }; then
+            echo -e "${GREEN}$PORT\t$STATE\t$SERVICE_DET\t\t[GREEN: MATCH]${NC}"
+            echo -e "  ${YELLOW}>> Run: ${NC}$RECOMMENDATION"
+        elif [ "$IS_KNOWN_PORT" = true ]; then
+            echo -e "${YELLOW}$PORT\t$STATE\t$SERVICE_DET\t\t[YELLOW: CONFLICT]${NC}"
+            echo -e "  ${YELLOW}>> Run: ${NC}$RECOMMENDATION"
+        else
+            echo -e "${YELLOW}$PORT\t$STATE\t$SERVICE_DET\t\t[YELLOW: OBFUSCATION]${NC}"
+            echo -e "  ${YELLOW}>> Run: ${NC}$RECOMMENDATION"
+        fi
+    elif [ "$IS_KNOWN_PORT" = true ]; then
+        echo -e "${ORANGE}$PORT\t$STATE\t$SERVICE_DET\t\t[ORANGE: SIGNATURE FAIL]${NC}"
     else
-        echo -e "${RED}$PORT\t$STATE\t$SERVICE_DET\t\t[UNKNOWN TARGET]${NC}"
+        echo -e "${RED}$PORT\t$STATE\t$SERVICE_DET\t\t[RED: UNKNOWN]${NC}"
     fi
 done
 
@@ -193,10 +162,58 @@ fi
 PHASE3_END=$(date +%s)
 echo -e "${GREEN}[+] Phase 3 Complete in $((PHASE3_END - PHASE3_START)) seconds.${NC}"
 
-# --- PHASE 4: SMART UDP ---
+# --- PHASE 4: SMART UDP (Top 1000 with Forensic Triage) ---
 PHASE4_START=$(date +%s)
-echo -e "\n${CYAN}[!] Phase 4: Smart UDP (Top 100) Starting...${NC}"
-sudo nmap -sU --top-ports 100 -T4 --exclude-ports $TCP_PORTS -oN $DIR/${PREFIX}udp_scan.nmap $TARGET > /dev/null
+echo -e "\n${CYAN}[!] Phase 4: Smart UDP (Top 1000) Starting...${NC}"
+
+# Scan the top 1000, but exclude any ports already found in TCP
+sudo nmap -sU --top-ports 1000 -T4 --exclude-ports $TCP_PORTS -oN $DIR/${PREFIX}udp_scan.nmap $TARGET > /dev/null
+
+echo -e "${MAGENTA}${BOLD}[!] UDP SERVICE EVALUATION & TRIAGE:${NC}"
+echo -e "${CYAN}PORT\tSTATE\tSERVICE\t\tSTATUS & RECOMMENDATION${NC}"
+echo -e "${CYAN}------------------------------------------------------------${NC}"
+
+# Extract open/open|filtered ports and run them through the Signature Engine
+grep "open" "$DIR/${PREFIX}udp_scan.nmap" | while read -r line; do
+    PORT=$(echo $line | awk -F'/' '{print $1}')
+    STATE=$(echo $line | awk '{print $2}')
+    SERVICE_DET=$(echo $line | awk '{print $3}')
+
+    IS_KNOWN_PORT=false
+    IS_KNOWN_SERVICE=false
+    EXPECTED_PORT=""
+    RECOMMENDATION=""
+
+    # SERVICE SIGNATURES (UDP Specific & Common)
+    case $SERVICE_DET in
+        snmp)          IS_KNOWN_SERVICE=true; EXPECTED_PORT="161"; RECOMMENDATION="snmp-check $TARGET -c public" ;;
+        tftp)          IS_KNOWN_SERVICE=true; EXPECTED_PORT="69";  RECOMMENDATION="tftp $TARGET -c get <file>" ;;
+        isakmp|ipsec*) IS_KNOWN_SERVICE=true; EXPECTED_PORT="500"; RECOMMENDATION="ike-scan -M $TARGET" ;;
+        domain)        IS_KNOWN_SERVICE=true; EXPECTED_PORT="53";  RECOMMENDATION="dig axfr @$TARGET \$DOMAIN" ;;
+        ntp)           IS_KNOWN_SERVICE=true; EXPECTED_PORT="123"; RECOMMENDATION="nmap -sU -p 123 --script ntp-info $TARGET" ;;
+    esac
+
+    # UDP CONTAINER TABLE
+    case $PORT in
+        53|67|68|69|123|161|162|500|4500) IS_KNOWN_PORT=true ;;
+    esac
+
+    # 5-OUTCOME EVALUATION
+    if [ "$IS_KNOWN_SERVICE" = true ]; then
+        if [ "$PORT" == "$EXPECTED_PORT" ]; then
+            echo -e "${GREEN}$PORT\t$STATE\t$SERVICE_DET\t\t[GREEN: MATCH]${NC}"
+            echo -e "  ${YELLOW}>> Run: ${NC}$RECOMMENDATION"
+        else
+            echo -e "${YELLOW}$PORT\t$STATE\t$SERVICE_DET\t\t[YELLOW: OBFUSCATION]${NC}"
+            echo -e "  ${YELLOW}>> Run: ${NC}$RECOMMENDATION"
+        fi
+    elif [ "$IS_KNOWN_PORT" = true ]; then
+        echo -e "${ORANGE}$PORT\t$STATE\t$SERVICE_DET\t\t[ORANGE: SIGNATURE FAIL]${NC}"
+    else
+        echo -e "${RED}$PORT\t$STATE\t$SERVICE_DET\t\t[RED: UNKNOWN]${NC}"
+    fi
+done
+
 PHASE4_END=$(date +%s)
 echo -e "${GREEN}[+] Phase 4 Complete in $((PHASE4_END - PHASE4_START)) seconds.${NC}"
 
