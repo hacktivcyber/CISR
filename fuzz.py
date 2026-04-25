@@ -66,8 +66,8 @@ def main():
     parser.add_argument("-d", "--dir_fs", help="Manual -fs for Directory", default=None)
     parser.add_argument("-s", "--sub_fs", help="Manual -fs for Subdomain", default=None)
     parser.add_argument("-e", "--extensions", help="Comma separated extensions", default=None)
-    parser.add_argument("--dir_dict", help="Path to directory wordlist", default="/home/kali/Desktop/dirFUZZ.txt")
-    parser.add_argument("--sub_dict", help="Path to subdomain wordlist", default="/home/kali/Desktop/subFUZZ.txt")
+    parser.add_argument("--dir_dict", help="Path to directory wordlist", default="./dirFUZZ.txt")
+    parser.add_argument("--sub_dict", help="Path to subdomain wordlist", default="./subFUZZ.txt")
     parser.add_argument("-debug", action="store_true", help="Show raw test responses")
     
     args = parser.parse_args()
