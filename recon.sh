@@ -24,7 +24,12 @@ PREFIX="${NAME}_"
 TOTAL_START=$(date +%s)
 
 mkdir -p "$DIR"
-echo -e "${BLUE}${BOLD}[+] Initializing Pro-Recon on $NAME ($TARGET)${NC}"
+
+# --- LOGGING SETUP ---
+LOGFILE="$DIR/${PREFIX}console_output.log"
+exec > >(tee -a "$LOGFILE") 2>&1
+
+echo -e "${BLUE}${BOLD}[+] Initializing Recon on $NAME ($TARGET)${NC}"
 echo -e "${BLUE}[+] Global Start Time: $(date)${NC}\n"
 
 # --- PHASE 1: TCP DISCOVERY ---
@@ -52,7 +57,7 @@ echo -e "\n${CYAN}[!] Phase 2: Domain Redirect Check Starting...${NC}"
 
 for port in 80 443 8080 8443; do
     if [[ ",$TCP_PORTS," == *",$port,"* ]]; then
-        DOMAIN=$(curl -Is --connect-timeout 5 http://$TARGET:$port 2>/dev/null | grep -i '^Location' | awk -F'[/:]' '{print $4}' | tr -d '\r')
+        DOMAIN=$(curl -Is --connect-timeout 5 http://$TARGET:$port 2>/dev/null | grep -i '^Location' | awk '{print $2}' | sed 's/http[s]*:\/\///' | cut -d'/' -f1 | tr -d '\r')
         
         if [[ ! -z "$DOMAIN" && "$DOMAIN" != "$TARGET" ]]; then
             echo -e "${MAGENTA}${BOLD}[ALERT] Port $port: Redirect detected to: $DOMAIN${NC}"
@@ -72,7 +77,7 @@ echo -e "${GREEN}[+] Phase 2 Complete in $((PHASE2_END - PHASE2_START)) seconds.
 # --- PHASE 3: DEEP ENUMERATION & SEARCHSPLOIT ---
 PHASE3_START=$(date +%s)
 echo -e "\n${CYAN}[!] Phase 3: Deep Dive & Searchsploit Starting...${NC}"
-CMD_DEEP="sudo nmap -sC -sV -p$TCP_PORTS --script=banner,default,vulners -oN $DIR/${PREFIX}tcp_detailed.nmap -oX $DIR/${PREFIX}tcp_detailed.xml $TARGET"
+CMD_DEEP="sudo nmap -sC -sV -p$TCP_PORTS --script=banner,default,vulners -oN $DIR/${PREFIX}tcp_detailed.nmap -oX $DIR/${PREFIX}tcp_detailed.xml -oG $DIR/${PREFIX}tcp_ports_detailed.grep $TARGET"
 echo -e "  [Run]: $CMD_DEEP"
 $CMD_DEEP > /dev/null
 
@@ -82,7 +87,7 @@ echo -e "${CYAN}PORT\tSTATE\tSERVICE\t\tSTATUS & RECOMMENDATION${NC}"
 echo -e "${CYAN}------------------------------------------------------------${NC}"
 
 # Parse the grepable output for port and service details
-grep -v "^#" "$DIR/${PREFIX}tcp_ports.grep" | grep "Ports:" | sed 's/.*Ports: //' | tr ',' '\n' | while read -r line; do
+grep -v "^#" "$DIR/${PREFIX}tcp_ports_detailed.grep" | grep "Ports:" | sed 's/.*Ports: //' | tr ',' '\n' | while read -r line; do
     PORT=$(echo $line | cut -d'/' -f1 | xargs)
     STATE=$(echo $line | cut -d'/' -f2 | xargs)
     SERVICE_DET=$(echo $line | cut -d'/' -f5 | xargs)
