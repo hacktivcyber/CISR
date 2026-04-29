@@ -238,6 +238,6 @@ echo -e "${BLUE}${BOLD}----------------------------------------------------${NC}
 # --- HTML REPORT GENERATION ---
 if command -v ansi2html &> /dev/null; then
     echo -e "${YELLOW}[!] Generating Visual HTML Report...${NC}"
-    cat "$FINAL_LOG" | ansi2html --full --dark > "$DIR/${PREFIX}report.html"
+    cat "$FINAL_LOG" | ansi2html > "$DIR/${PREFIX}report.html"
     echo -e "${GREEN}[+] Report saved: $DIR/${PREFIX}report.html${NC}"
 fi
