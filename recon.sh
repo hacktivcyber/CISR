@@ -1,5 +1,10 @@
 #!/bin/bash
 
+# --- PHASE 0: IMMEDIATE LOGGING SETUP ---
+# Start capturing everything immediately into a temp file
+TEMP_LOG="/tmp/recon_init.log"
+exec > >(tee -a "$TEMP_LOG") 2>&1
+
 # --- COLOR DEFINITIONS ---
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -10,6 +15,15 @@ CYAN='\033[0;36m'
 BOLD='\033[1m'
 ORANGE='\033[38;5;208m'
 NC='\033[0m'
+
+# Check for ansi2html and install if missing
+if ! command -v ansi2html &> /dev/null; then
+    echo -e "${YELLOW}[!] ansi2html not found. Attempting to install...${NC}"
+    sudo apt update && sudo apt install -y colorized-logs
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}[- ] Failed to install colorized-logs. HTML report will be skipped.${NC}"
+    fi
+fi
 
 # Check for two arguments
 if [ "$#" -ne 2 ]; then
@@ -25,9 +39,12 @@ TOTAL_START=$(date +%s)
 
 mkdir -p "$DIR"
 
-# --- LOGGING SETUP ---
-LOGFILE="$DIR/${PREFIX}console_output.log"
-exec > >(tee -a "$LOGFILE") 2>&1
+# --- FINALIZE LOGGING ---
+# Move the initial boot logs to the recon folder and resume logging there
+FINAL_LOG="$DIR/${PREFIX}console_output.log"
+cat "$TEMP_LOG" > "$FINAL_LOG"
+rm "$TEMP_LOG"
+exec > >(tee -a "$FINAL_LOG") 2>&1
 
 echo -e "${BLUE}${BOLD}[+] Initializing Recon on $NAME ($TARGET)${NC}"
 echo -e "${BLUE}[+] Global Start Time: $(date)${NC}\n"
@@ -58,7 +75,7 @@ echo -e "\n${CYAN}[!] Phase 2: Domain Redirect Check Starting...${NC}"
 for port in 80 443 8080 8443; do
     if [[ ",$TCP_PORTS," == *",$port,"* ]]; then
         DOMAIN=$(curl -Is --connect-timeout 5 http://$TARGET:$port 2>/dev/null | grep -i '^Location' | awk '{print $2}' | sed 's/http[s]*:\/\///' | cut -d'/' -f1 | tr -d '\r')
-        
+
         if [[ ! -z "$DOMAIN" && "$DOMAIN" != "$TARGET" ]]; then
             echo -e "${MAGENTA}${BOLD}[ALERT] Port $port: Redirect detected to: $DOMAIN${NC}"
             if ! grep -q "$DOMAIN" /etc/hosts; then
@@ -81,12 +98,10 @@ CMD_DEEP="sudo nmap -sC -sV -p$TCP_PORTS --script=banner,default,vulners -oN $DI
 echo -e "  [Run]: $CMD_DEEP"
 $CMD_DEEP > /dev/null
 
-# Priority Alerts & Methodology Guidance
 echo -e "\n${MAGENTA}${BOLD}[!] COMPREHENSIVE SERVICE EVALUATION & TRIAGE:${NC}"
 echo -e "${CYAN}PORT\tSTATE\tSERVICE\t\tSTATUS & RECOMMENDATION${NC}"
 echo -e "${CYAN}------------------------------------------------------------${NC}"
 
-# Parse the grepable output for port and service details
 grep -v "^#" "$DIR/${PREFIX}tcp_ports_detailed.grep" | grep "Ports:" | sed 's/.*Ports: //' | tr ',' '\n' | while read -r line; do
     PORT=$(echo $line | cut -d'/' -f1 | xargs)
     STATE=$(echo $line | cut -d'/' -f2 | xargs)
@@ -97,7 +112,6 @@ grep -v "^#" "$DIR/${PREFIX}tcp_ports_detailed.grep" | grep "Ports:" | sed 's/.*
     EXPECTED_PORT=""
     RECOMMENDATION=""
 
-    # 1. THE TRUTH TABLE (Service Signatures)
     case $SERVICE_DET in
         ftp*)          IS_KNOWN_SERVICE=true; EXPECTED_PORT="21"; RECOMMENDATION="nmap -sV --script ftp-anon -p $PORT $TARGET" ;;
         ssh)           IS_KNOWN_SERVICE=true; EXPECTED_PORT="22"; RECOMMENDATION="ssh -v -o PreferredAuthentications=password $TARGET -p $PORT" ;;
@@ -127,15 +141,12 @@ grep -v "^#" "$DIR/${PREFIX}tcp_ports_detailed.grep" | grep "Ports:" | sed 's/.*
         mongodb)       IS_KNOWN_SERVICE=true; EXPECTED_PORT="27017"; RECOMMENDATION="mongo --host $TARGET --port $PORT" ;;
     esac
 
-    # 2. THE CONTAINER TABLE (Known Ports)
     case $PORT in
         21|22|23|25|53|79|80|88|110|111|135|139|143|161|389|443|445|465|587|593|631|636|873|993|995|1080|1433|1521|2049|3306|3389|3690|4444|5000|5432|5900|5985|5986|6379|8000|8080|8081|8443|8888|9000|9200|10000|27017)
             IS_KNOWN_PORT=true ;;
     esac
 
-    # 3. 5-OUTCOME EVALUATION ENGINE
     if [ "$IS_KNOWN_SERVICE" = true ]; then
-        # Check for Match (Including Web Clusters)
         if [ "$PORT" == "$EXPECTED_PORT" ] || { [ "$EXPECTED_PORT" == "80" ] && [[ "$PORT" =~ ^(443|8000|8080|8081|8443|8888|9000|10000)$ ]]; }; then
             echo -e "${GREEN}$PORT\t$STATE\t$SERVICE_DET\t\t[GREEN: MATCH]${NC}"
             echo -e "  ${YELLOW}>> Run: ${NC}$RECOMMENDATION"
@@ -154,10 +165,8 @@ grep -v "^#" "$DIR/${PREFIX}tcp_ports_detailed.grep" | grep "Ports:" | sed 's/.*
 done
 
 echo -e "${CYAN}[!] Compiling Exploit Database Leads via XML...${NC}"
-
 searchsploit --nmap "$DIR/${PREFIX}tcp_detailed.xml" --disable-colour > "$DIR/${PREFIX}searchsploit_results.txt" 2>/dev/null
 
-# Clean up: Highlight if any exploits were actually found
 if [ -s "$DIR/${PREFIX}searchsploit_results.txt" ]; then
     echo -e "${RED}[+] Exploits found! Check $DIR/${PREFIX}searchsploit_results.txt${NC}"
 else
@@ -167,29 +176,24 @@ fi
 PHASE3_END=$(date +%s)
 echo -e "${GREEN}[+] Phase 3 Complete in $((PHASE3_END - PHASE3_START)) seconds.${NC}"
 
-# --- PHASE 4: SMART UDP (Top 1000 with Forensic Triage) ---
+# --- PHASE 4: SMART UDP ---
 PHASE4_START=$(date +%s)
 echo -e "\n${CYAN}[!] Phase 4: Smart UDP (Top 1000) Starting...${NC}"
-
-# Scan the top 1000, but exclude any ports already found in TCP
 sudo nmap -sU --top-ports 1000 -T4 --exclude-ports $TCP_PORTS -oN $DIR/${PREFIX}udp_scan.nmap $TARGET > /dev/null
 
 echo -e "${MAGENTA}${BOLD}[!] UDP SERVICE EVALUATION & TRIAGE:${NC}"
 echo -e "${CYAN}PORT\tSTATE\tSERVICE\t\tSTATUS & RECOMMENDATION${NC}"
 echo -e "${CYAN}------------------------------------------------------------${NC}"
 
-# Extract open/open|filtered ports and run them through the Signature Engine
 grep "open" "$DIR/${PREFIX}udp_scan.nmap" | while read -r line; do
     PORT=$(echo $line | awk -F'/' '{print $1}')
     STATE=$(echo $line | awk '{print $2}')
     SERVICE_DET=$(echo $line | awk '{print $3}')
-
     IS_KNOWN_PORT=false
     IS_KNOWN_SERVICE=false
     EXPECTED_PORT=""
     RECOMMENDATION=""
 
-    # SERVICE SIGNATURES (UDP Specific & Common)
     case $SERVICE_DET in
         snmp)          IS_KNOWN_SERVICE=true; EXPECTED_PORT="161"; RECOMMENDATION="snmp-check $TARGET -c public" ;;
         tftp)          IS_KNOWN_SERVICE=true; EXPECTED_PORT="69";  RECOMMENDATION="tftp $TARGET -c get <file>" ;;
@@ -198,12 +202,10 @@ grep "open" "$DIR/${PREFIX}udp_scan.nmap" | while read -r line; do
         ntp)           IS_KNOWN_SERVICE=true; EXPECTED_PORT="123"; RECOMMENDATION="nmap -sU -p 123 --script ntp-info $TARGET" ;;
     esac
 
-    # UDP CONTAINER TABLE
     case $PORT in
         53|67|68|69|123|161|162|500|4500) IS_KNOWN_PORT=true ;;
     esac
 
-    # 5-OUTCOME EVALUATION
     if [ "$IS_KNOWN_SERVICE" = true ]; then
         if [ "$PORT" == "$EXPECTED_PORT" ]; then
             echo -e "${GREEN}$PORT\t$STATE\t$SERVICE_DET\t\t[GREEN: MATCH]${NC}"
@@ -230,5 +232,12 @@ echo -e "\n${BLUE}${BOLD}----------------------------------------------------${N
 echo -e "${GREEN}${BOLD}[+] RECON COMPLETE FOR $NAME${NC}"
 echo -e "${CYAN}[i] Total Runtime: $TOTAL_RUNTIME seconds${NC}"
 echo -e "${CYAN}[i] Final Finish: $(date)${NC}"
-echo -e "    - Results: $DIR/"
+echo -e "    - Results Directory: $DIR/"
 echo -e "${BLUE}${BOLD}----------------------------------------------------${NC}"
+
+# --- HTML REPORT GENERATION ---
+if command -v ansi2html &> /dev/null; then
+    echo -e "${YELLOW}[!] Generating Visual HTML Report...${NC}"
+    cat "$FINAL_LOG" | ansi2html --full --dark > "$DIR/${PREFIX}report.html"
+    echo -e "${GREEN}[+] Report saved: $DIR/${PREFIX}report.html${NC}"
+fi
