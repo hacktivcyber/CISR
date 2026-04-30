@@ -120,19 +120,32 @@ grep -v "^#" "$DIR/${PREFIX}tcp_ports_detailed.grep" | grep "Ports:" | sed 's/.*
         domain)        IS_KNOWN_SERVICE=true; EXPECTED_PORT="53"; RECOMMENDATION="dig axfr @$TARGET \$DOMAIN" ;;
         finger)        IS_KNOWN_SERVICE=true; EXPECTED_PORT="79"; RECOMMENDATION="finger-user-enum.pl -U /usr/share/seclists/Usernames/Names/names.txt -t $TARGET" ;;
         http*|ssl/http*|https*|uwsgi|nginx|apache|jetty|cups)
-                       IS_KNOWN_SERVICE=true; EXPECTED_PORT="80"; RECOMMENDATION="python3 fuzz.py $( [[ "$SERVICE_DET" == *"ssl"* || "$PORT" == "443" || "$PORT" == "8443" ]] && echo "https" || echo "http" )://$TARGET:$PORT" ;;
+            IS_KNOWN_SERVICE=true; EXPECTED_PORT="80"
+            PROTO=$( [[ "$SERVICE_DET" == *"ssl"* || "$PORT" == "443" || "$PORT" == "8443" ]] && echo "https" || echo "http" )
+            URL="$PROTO://$TARGET:$PORT"
+            RECOMMENDATION="python3 fuzz.py $URL\n      [Fingerprint]: whatweb -a 3 $URL\n      [Vhosts]: ffuf -w /usr/share/seclists/Discovery/DNS/namelist.txt -H 'Host: FUZZ.$NAME.htb' -u $URL -fs 0" ;;
         kerberos*)     IS_KNOWN_SERVICE=true; EXPECTED_PORT="88"; RECOMMENDATION="nmap -p $PORT --script krb5-enum-users --script-args krb5-enum-users.realm='<DOMAIN>' $TARGET" ;;
         pop3*)         IS_KNOWN_SERVICE=true; EXPECTED_PORT="110"; RECOMMENDATION="nmap -p $PORT --script pop3-capabilities $TARGET" ;;
-        rpcbind|sunrpc) IS_KNOWN_SERVICE=true; EXPECTED_PORT="111"; RECOMMENDATION="rpcinfo -p $TARGET" ;;
+        rpcbind|sunrpc)
+            IS_KNOWN_SERVICE=true; EXPECTED_PORT="111"
+            RECOMMENDATION="rpcinfo -p $TARGET\n      [Enum]: rpcclient -U '' -N $TARGET" ;;
         imap*)         IS_KNOWN_SERVICE=true; EXPECTED_PORT="143"; RECOMMENDATION="nmap -p $PORT --script imap-capabilities $TARGET" ;;
-        snmp)          IS_KNOWN_SERVICE=true; EXPECTED_PORT="161"; RECOMMENDATION="snmp-check $TARGET -c public" ;;
+        snmp)
+            IS_KNOWN_SERVICE=true; EXPECTED_PORT="161"
+            RECOMMENDATION="onesixtyone -c /usr/share/seclists/Discovery/SNMP/common-snmp-community-strings.txt $TARGET\n      [Check]: snmp-check $TARGET -c public" ;;
         ldap*)         IS_KNOWN_SERVICE=true; EXPECTED_PORT="389"; RECOMMENDATION="ldapsearch -x -H ldap://$TARGET:$PORT -s base namingcontexts" ;;
-        microsoft-ds|smb*|netbios-ssn) IS_KNOWN_SERVICE=true; EXPECTED_PORT="445"; RECOMMENDATION="enum4linux-ng -A $TARGET" ;;
+        microsoft-ds|smb*|netbios-ssn)
+            IS_KNOWN_SERVICE=true; EXPECTED_PORT="445"
+            RECOMMENDATION="enum4linux-ng -A $TARGET\n      [Shares]: smbclient -L //$TARGET/ -N\n      [Permissions]: smbmap -H $TARGET" ;;
         rsync)         IS_KNOWN_SERVICE=true; EXPECTED_PORT="873"; RECOMMENDATION="rsync --list-only $TARGET::" ;;
-        ms-sql-s)      IS_KNOWN_SERVICE=true; EXPECTED_PORT="1433"; RECOMMENDATION="impacket-mssqlclient -windows-auth <DOMAIN>/<USER>@$TARGET" ;;
+        ms-sql-s)
+            IS_KNOWN_SERVICE=true; EXPECTED_PORT="1433"
+            RECOMMENDATION="nmap -p $PORT --script ms-sql-info,ms-sql-ntlm-info $TARGET\n      [Client]: impacket-mssqlclient -windows-auth <DOMAIN>/<USER>@$TARGET" ;;
         oracle)        IS_KNOWN_SERVICE=true; EXPECTED_PORT="1521"; RECOMMENDATION="nmap -p $PORT --script oracle-tns-version $TARGET" ;;
         nfs)           IS_KNOWN_SERVICE=true; EXPECTED_PORT="2049"; RECOMMENDATION="showmount -e $TARGET" ;;
-        mysql|mariadb) IS_KNOWN_SERVICE=true; EXPECTED_PORT="3306"; RECOMMENDATION="mysql -h $TARGET -P $PORT -u root" ;;
+        mysql|mariadb)
+            IS_KNOWN_SERVICE=true; EXPECTED_PORT="3306"
+            RECOMMENDATION="nmap -p $PORT --script mysql-audit,mysql-databases,mysql-variables $TARGET\n      [Login]: mysql -h $TARGET -P $PORT -u root" ;;
         ms-wbt-server) IS_KNOWN_SERVICE=true; EXPECTED_PORT="3389"; RECOMMENDATION="nmap -p $PORT --script rdp-ntlm-info $TARGET" ;;
         postgresql)    IS_KNOWN_SERVICE=true; EXPECTED_PORT="5432"; RECOMMENDATION="psql -h $TARGET -p $PORT -U postgres" ;;
         vnc)           IS_KNOWN_SERVICE=true; EXPECTED_PORT="5900"; RECOMMENDATION="nmap -sV --script vnc-info -p $PORT $TARGET" ;;
