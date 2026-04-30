@@ -118,12 +118,12 @@ grep -v "^#" "$DIR/${PREFIX}tcp_ports_detailed.grep" | grep "Ports:" | sed 's/.*
         telnet)        IS_KNOWN_SERVICE=true; EXPECTED_PORT="23"; RECOMMENDATION="telnet $TARGET $PORT" ;;
         smtp|submission|smtps) IS_KNOWN_SERVICE=true; EXPECTED_PORT="25"; RECOMMENDATION="nmap -p $PORT --script smtp-enum-users $TARGET" ;;
         domain)        IS_KNOWN_SERVICE=true; EXPECTED_PORT="53"; RECOMMENDATION="dig axfr @$TARGET \$DOMAIN" ;;
-        finger)        IS_KNOWN_SERVICE=true; EXPECTED_PORT="79"; RECOMMENDATION="finger-user-enum.pl -U /usr/share/seclists/Usernames/Names/names.txt -t $TARGET" ;;
+        finger)        IS_KNOWN_SERVICE=true; EXPECTED_PORT="79"; RECOMMENDATION="finger-user-enum.pl -U /usr/share/wordlists/SecLists/Usernames/Names/names.txt -t $TARGET" ;;
         http*|ssl/http*|https*|uwsgi|nginx|apache|jetty|cups)
             IS_KNOWN_SERVICE=true; EXPECTED_PORT="80"
             PROTO=$( [[ "$SERVICE_DET" == *"ssl"* || "$PORT" == "443" || "$PORT" == "8443" ]] && echo "https" || echo "http" )
             URL="$PROTO://$TARGET:$PORT"
-            RECOMMENDATION="python3 fuzz.py $URL\n      [Fingerprint]: whatweb -a 3 $URL\n      [Vhosts]: ffuf -w /usr/share/seclists/Discovery/DNS/namelist.txt -H 'Host: FUZZ.$NAME.htb' -u $URL -fs 0" ;;
+            RECOMMENDATION="python3 fuzz.py $URL\n      [Fingerprint]: whatweb -a 3 $URL\n      [Vhosts]: ffuf -w /usr/share/wordlists/SecLists/Discovery/DNS/namelist.txt -H 'Host: FUZZ.$NAME.htb' -u $URL -fs 0" ;;
         kerberos*)     IS_KNOWN_SERVICE=true; EXPECTED_PORT="88"; RECOMMENDATION="nmap -p $PORT --script krb5-enum-users --script-args krb5-enum-users.realm='<DOMAIN>' $TARGET" ;;
         pop3*)         IS_KNOWN_SERVICE=true; EXPECTED_PORT="110"; RECOMMENDATION="nmap -p $PORT --script pop3-capabilities $TARGET" ;;
         rpcbind|sunrpc)
@@ -132,7 +132,7 @@ grep -v "^#" "$DIR/${PREFIX}tcp_ports_detailed.grep" | grep "Ports:" | sed 's/.*
         imap*)         IS_KNOWN_SERVICE=true; EXPECTED_PORT="143"; RECOMMENDATION="nmap -p $PORT --script imap-capabilities $TARGET" ;;
         snmp)
             IS_KNOWN_SERVICE=true; EXPECTED_PORT="161"
-            RECOMMENDATION="onesixtyone -c /usr/share/seclists/Discovery/SNMP/common-snmp-community-strings.txt $TARGET\n      [Check]: snmp-check $TARGET -c public" ;;
+            RECOMMENDATION="onesixtyone -c /usr/share/wordlists/SecLists/Discovery/SNMP/common-snmp-community-strings.txt $TARGET\n      [Check]: snmp-check $TARGET -c public" ;;
         ldap*)         IS_KNOWN_SERVICE=true; EXPECTED_PORT="389"; RECOMMENDATION="ldapsearch -x -H ldap://$TARGET:$PORT -s base namingcontexts" ;;
         microsoft-ds|smb*|netbios-ssn)
             IS_KNOWN_SERVICE=true; EXPECTED_PORT="445"
