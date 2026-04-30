@@ -94,7 +94,7 @@ echo -e "${GREEN}[+] Phase 2 Complete in $((PHASE2_END - PHASE2_START)) seconds.
 # --- PHASE 3: DEEP ENUMERATION & SEARCHSPLOIT ---
 PHASE3_START=$(date +%s)
 echo -e "\n${CYAN}[!] Phase 3: Deep Dive & Searchsploit Starting...${NC}"
-CMD_DEEP="sudo nmap -sC -sV -p$TCP_PORTS --script=banner,default,vulners -oN $DIR/${PREFIX}tcp_detailed.nmap -oX $DIR/${PREFIX}tcp_detailed.xml -oG $DIR/${PREFIX}tcp_ports_detailed.grep $TARGET"
+CMD_DEEP="sudo nmap -vv -sC -sV -p$TCP_PORTS --script=banner,default,vulners -oN $DIR/${PREFIX}tcp_detailed.nmap -oX $DIR/${PREFIX}tcp_detailed.xml -oG $DIR/${PREFIX}tcp_ports_detailed.grep $TARGET"
 echo -e "  [Run]: $CMD_DEEP"
 $CMD_DEEP > /dev/null
 
