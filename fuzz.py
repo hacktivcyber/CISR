@@ -71,7 +71,15 @@ def main():
     parser.add_argument("-debug", action="store_true", help="Show raw test responses")
     
     args = parser.parse_args()
-    
+
+    # --- EXTENSION CLEANING CHECK ---
+    formatted_extensions = None
+    if args.extensions:
+        # Split by comma, strip whitespace, ensure a leading dot, then rejoin
+        ext_list = [f".{e.strip().lstrip('.')}" for e in args.extensions.split(',')]
+        formatted_extensions = ",".join(ext_list)
+    # --------------------------------
+
     target = args.target_url if args.target_url.startswith("http") else f"http://{args.target_url}"
     clean_name = get_clean_name(target)
     
@@ -92,9 +100,9 @@ def main():
     dir_out = f"./{clean_name}_dir_results.txt"
     dir_cmd = ["ffuf", "-w", dir_dict, "-u", f"{target.rstrip('/')}/FUZZ", "-c", "-v", 
                "-o", dir_out, "-of", "csv", "-mc", "200-299,301,302,307,400,401,403,405,418,429,500,502,503", "-fs", final_dir_fs]
-    if args.extensions:
-        dir_cmd += ["-e", args.extensions]
-    
+    if formatted_extensions:
+        dir_cmd += ["-e", formatted_extensions]
+
     print(f"\n[+] Running Directory Fuzzing...")
     subprocess.run(dir_cmd)
 
